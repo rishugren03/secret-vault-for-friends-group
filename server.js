@@ -23,13 +23,24 @@ if (usePostgres) {
         ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
     });
 
-    // Initialize PostgreSQL table
+    // Initialize PostgreSQL tables
     await pgPool.query(`
         CREATE TABLE IF NOT EXISTS vault (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             salt TEXT NOT NULL DEFAULT '',
             encrypted_data TEXT NOT NULL DEFAULT '',
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await pgPool.query(`
+        CREATE TABLE IF NOT EXISTS vault_users (
+            id SERIAL PRIMARY KEY,
+            vault_id INTEGER NOT NULL REFERENCES vault(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('owner', 'member')),
+            joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(vault_id, name)
         )
     `);
 
@@ -63,6 +74,17 @@ if (usePostgres) {
             salt TEXT NOT NULL DEFAULT '',
             encrypted_data TEXT NOT NULL DEFAULT '',
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS vault_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vault_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('owner', 'member')),
+            joined_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(vault_id, name)
         )
     `);
 
@@ -140,6 +162,101 @@ app.post('/api/vault', async (req, res) => {
     } catch (error) {
         console.error('Error saving vault:', error);
         res.status(500).json({ error: 'Failed to save vault' });
+    }
+});
+
+// Get all users in vault
+app.get('/api/vault/users/:salt', async (req, res) => {
+    try {
+        if (usePostgres) {
+            const result = await pgPool.query(`
+                SELECT name, role, joined_at
+                FROM vault_users vu
+                JOIN vault v ON vu.vault_id = v.id
+                WHERE v.salt = $1
+            `, [req.params.salt]);
+            res.json(result.rows);
+        } else {
+            const result = db.prepare(`
+                SELECT vu.name, vu.role, vu.joined_at
+                FROM vault_users vu
+                JOIN vault v ON vu.vault_id = v.id
+                WHERE v.salt = ?
+            `).all(req.params.salt);
+            res.json(result);
+        }
+    } catch (error) {
+        console.error('Error fetching vault users:', error);
+        res.status(500).json({ error: 'Failed to fetch vault users' });
+    }
+});
+
+// Add user to vault (owner only)
+app.post('/api/vault/users', async (req, res) => {
+    const { salt, name, role } = req.body;
+
+    if (!salt || !name || !role) {
+        return res.status(400).json({ error: 'salt, name, and role are required' });
+    }
+
+    if (!['owner', 'member'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    try {
+        if (usePostgres) {
+            // Get vault_id from salt
+            const vaultResult = await pgPool.query(
+                'SELECT id FROM vault WHERE salt = $1', [salt]
+            );
+            if (vaultResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Vault not found' });
+            }
+            const vaultId = vaultResult.rows[0].id;
+
+            // Check if user already exists
+            const existingUser = await pgPool.query(
+                'SELECT id FROM vault_users WHERE vault_id = $1 AND name = $2',
+                [vaultId, name]
+            );
+            if (existingUser.rows.length > 0) {
+                return res.status(400).json({ error: 'User already exists in vault' });
+            }
+
+            // Add user to vault
+            await pgPool.query(
+                'INSERT INTO vault_users (vault_id, name, role) VALUES ($1, $2, $3)',
+                [vaultId, name, role]
+            );
+        } else {
+            // Get vault_id from salt
+            const vaultResult = db.prepare(
+                'SELECT id FROM vault WHERE salt = ?'
+            ).get(salt);
+
+            if (!vaultResult) {
+                return res.status(404).json({ error: 'Vault not found' });
+            }
+
+            // Check if user already exists
+            const existingUser = db.prepare(
+                'SELECT id FROM vault_users WHERE vault_id = ? AND name = ?'
+            ).get(vaultResult.id, name);
+
+            if (existingUser) {
+                return res.status(400).json({ error: 'User already exists in vault' });
+            }
+
+            // Add user to vault
+            db.prepare(
+                'INSERT INTO vault_users (vault_id, name, role) VALUES (?, ?, ?)'
+            ).run(vaultResult.id, name, role);
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error adding vault user:', error);
+        res.status(500).json({ error: 'Failed to add vault user' });
     }
 });
 

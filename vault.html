@@ -419,7 +419,15 @@
         <div class="vault-screen" id="vaultScreen">
             <div class="vault-header">
                 <h2>Your Notes</h2>
-                <div class="vault-actions">
+                <div class="vault-meta" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+                    <div style="font-size: 0.85rem; color: #888;">
+                        <span id="userRole"></span> <span id="userName"></span>
+                    </div>
+                    <div id="ownerActions" style="display: none;">
+                        <button class="icon-btn secondary" id="inviteUserBtn">👥 Invite Member</button>
+                    </div>
+                </div>
+                <div class="vault-actions" style="margin-top: 1rem;">
                     <button class="icon-btn" id="addNoteBtn">+ Add Note</button>
                     <button class="icon-btn secondary" id="lockBtn">🔒 Lock</button>
                 </div>
@@ -482,6 +490,8 @@
         let editingNoteId = null;
         let activityTimer = null;
         let warningTimer = null;
+        let currentUser = null;
+        let allUsers = [];
 
         // ===== Crypto Functions =====
 
@@ -507,6 +517,58 @@
                 false,
                 ['encrypt', 'decrypt']
             );
+        }
+
+        function canEditNote(note) {
+            if (!currentUser) return false;
+            if (currentUser.role === 'owner') return true;
+            if (currentUser.role === 'member' && currentUser.name === note.author) return true;
+            return false;
+        }
+
+        function canDeleteNote(note) {
+            if (!currentUser) return false;
+            if (currentUser.role === 'owner') return true;
+            if (currentUser.role === 'member' && currentUser.name === note.author) return true;
+            return false;
+        }
+
+        async function loadUsers(salt) {
+            try {
+                const response = await fetch(`${API_BASE}/api/vault/users/${salt}`);
+                if (!response.ok) throw new Error('Failed to fetch vault users');
+                return await response.json();
+            } catch (error) {
+                console.error('Error loading users:', error);
+                return [];
+            }
+        }
+
+        async function createUser(salt, name, role) {
+            try {
+                const response = await fetch(`${API_BASE}/api/vault/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ salt, name, role })
+                });
+                if (!response.ok) throw new Error('Failed to create user');
+                return await response.json();
+            } catch (error) {
+                console.error('Error creating user:', error);
+                throw error;
+            }
+        }
+
+        async function vaultExists(salt) {
+            try {
+                const response = await fetch(`${API_BASE}/api/vault/users/${salt}`);
+                if (!response.ok) return false;
+                const users = await response.json();
+                return users.length > 0;
+            } catch (error) {
+                console.error('Error checking vault existence:', error);
+                return false;
+            }
         }
 
         async function encrypt(data, key) {
@@ -593,10 +655,11 @@
             return null;
         }
 
-        async function vaultExists() {
-            const serverData = await fetchVaultFromServer();
-            return !!(serverData.salt && serverData.salt.trim() !== '' &&
-                      serverData.encryptedData && serverData.encryptedData.trim() !== '');
+        async function vaultExists(salt) {
+            const response = await fetch(`${API_BASE}/api/vault/users/${salt}`);
+            if (!response.ok) return false;
+            const users = await response.json();
+            return users.length > 0;
         }
 
         async function createNewVault(passphrase) {
