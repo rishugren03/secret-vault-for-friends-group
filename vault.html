@@ -720,8 +720,25 @@
         function showVaultScreen() {
             document.getElementById('lockScreen').classList.remove('active');
             document.getElementById('vaultScreen').classList.add('active');
+            updateUserDisplay();
             renderNotes();
             resetActivityTimer();
+        }
+
+        function updateUserDisplay() {
+            const roleEl = document.getElementById('userRole');
+            const nameEl = document.getElementById('userName');
+            const ownerActions = document.getElementById('ownerActions');
+
+            if (currentUser) {
+                roleEl.textContent = currentUser.role === 'owner' ? '👑 Owner' : '👤 Member';
+                nameEl.textContent = `(${currentUser.name})`;
+                ownerActions.style.display = currentUser.role === 'owner' ? 'block' : 'none';
+            } else {
+                roleEl.textContent = '';
+                nameEl.textContent = '';
+                ownerActions.style.display = 'none';
+            }
         }
 
         function renderNotes() {
@@ -742,21 +759,28 @@
 
             notesList.innerHTML = vault
                 .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                .map(note => `
+                .map(note => {
+                    const canEdit = canEditNote(note);
+                    const canDelete = canDeleteNote(note);
+                    const author = note.author || 'Unknown';
+
+                    return `
                     <div class="note-card" data-id="${note.id}">
                         <div class="note-header">
                             <div>
                                 <div class="note-title">${escapeHtml(note.title)}</div>
-                                <div class="note-date">${formatDate(note.createdAt)}</div>
+                                <div class="note-date">${formatDate(note.createdAt)} • by ${escapeHtml(author)}</div>
                             </div>
+                            ${canEdit || canDelete ? `
                             <div class="note-actions">
-                                <button class="secondary edit-note" data-id="${note.id}">Edit</button>
-                                <button class="danger delete-note" data-id="${note.id}">Delete</button>
+                                ${canEdit ? `<button class="secondary edit-note" data-id="${note.id}">Edit</button>` : ''}
+                                ${canDelete ? `<button class="danger delete-note" data-id="${note.id}">Delete</button>` : ''}
                             </div>
+                            ` : ''}
                         </div>
                         <div class="note-body" style="display: none;">${escapeHtml(note.body)}</div>
                     </div>
-                `).join('');
+                `}).join('');
 
             // Add click handlers to expand/collapse
             notesList.querySelectorAll('.note-card').forEach(card => {
@@ -831,6 +855,10 @@
                     // Edit existing
                     const note = vault.find(n => n.id === editingNoteId);
                     if (note) {
+                        if (!canEditNote(note)) {
+                            errorEl.textContent = 'You can only edit your own notes';
+                            return;
+                        }
                         note.title = title;
                         note.body = body;
                     }
@@ -840,6 +868,7 @@
                         id: generateId(),
                         title,
                         body,
+                        author: currentUser ? currentUser.name : 'Unknown',
                         createdAt: new Date().toISOString()
                     };
                     vault.push(newNote);
@@ -923,9 +952,24 @@
                     return;
                 }
 
+                const saltBase64 = arrayBufferToBase64(salt);
+
+                // Check if vault has users
+                const hasUsers = await vaultExists(saltBase64);
+
+                if (!hasUsers) {
+                    errorEl.textContent = 'Vault exists but has no users. Please contact the vault owner.';
+                    btn.disabled = false;
+                    btn.textContent = 'Unlock Vault';
+                    return;
+                }
+
                 derivedKey = await deriveKey(passphrase, salt);
                 await loadVault();
-                showVaultScreen();
+
+                // Load users and ask who they are
+                allUsers = await loadUsers(saltBase64);
+                showUserSelection(saltBase64);
             } catch (e) {
                 errorEl.textContent = e.message || 'Incorrect passphrase';
                 derivedKey = null;
@@ -933,6 +977,46 @@
                 btn.disabled = false;
                 btn.textContent = 'Unlock Vault';
             }
+        }
+
+        function showUserSelection(saltBase64) {
+            const lockScreen = document.getElementById('lockScreen');
+            lockScreen.innerHTML = `
+                <div class="input-group">
+                    <label for="userNameInput">Who are you?</label>
+                    <p style="color: #888; font-size: 0.9rem; margin-bottom: 1rem;">
+                        Select your name from the vault members
+                    </p>
+                    <select id="userNameInput" style="width: 100%; padding: 0.75rem; background: #0f0f0f; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 1rem;">
+                        <option value="">-- Select your name --</option>
+                        ${allUsers.map(u => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)} (${u.role})</option>`).join('')}
+                    </select>
+                </div>
+                <button id="continueBtn">Continue</button>
+                <div id="lockError" class="error"></div>
+            `;
+
+            document.getElementById('continueBtn').addEventListener('click', () => selectUser(saltBase64));
+        }
+
+        function selectUser(saltBase64) {
+            const userName = document.getElementById('userNameInput').value;
+            const errorEl = document.getElementById('lockError');
+
+            if (!userName) {
+                errorEl.textContent = 'Please select your name';
+                return;
+            }
+
+            const user = allUsers.find(u => u.name === userName);
+            if (!user) {
+                errorEl.textContent = 'User not found';
+                return;
+            }
+
+            currentUser = user;
+            updateUserDisplay();
+            showVaultScreen();
         }
 
         async function createVault() {
@@ -957,32 +1041,52 @@
             const originalText = btn.textContent;
             btn.textContent = 'Creating...';
 
-            try {
-                const exists = await vaultExists();
+            // Ask for owner name first
+            const lockScreen = document.getElementById('lockScreen');
+            lockScreen.innerHTML = `
+                <div class="input-group">
+                    <label for="ownerNameInput">Your Name</label>
+                    <p style="color: #888; font-size: 0.9rem; margin-bottom: 1rem;">
+                        You'll be the owner of this vault. Enter your name:
+                    </p>
+                    <input type="text" id="ownerNameInput" placeholder="e.g., Alice, Bob" autocomplete="off">
+                </div>
+                <button id="confirmCreateBtn">Create Vault</button>
+                <div id="lockError" class="error"></div>
+            `;
 
-                if (exists) {
-                    errorEl.textContent = 'A vault already exists. Use "Unlock Vault" to access it.';
-                    btn.disabled = false;
-                    btn.textContent = originalText;
+            document.getElementById('confirmCreateBtn').addEventListener('click', async () => {
+                const ownerName = document.getElementById('ownerNameInput').value.trim();
+                const errorEl = document.getElementById('lockError');
+                const btn = document.getElementById('confirmCreateBtn');
+
+                if (!ownerName) {
+                    errorEl.textContent = 'Please enter your name';
                     return;
                 }
 
-                const result = await createNewVault(passphrase);
-                derivedKey = result.key;
-                vault = [];
+                btn.disabled = true;
+                btn.textContent = 'Creating...';
 
-                successEl.textContent = '✓ Vault created! Opening...';
+                try {
+                    const result = await createNewVault(passphrase);
+                    derivedKey = result.key;
+                    vault = [];
 
-                setTimeout(() => {
+                    const saltBase64 = arrayBufferToBase64(result.salt);
+                    await createUser(saltBase64, ownerName, 'owner');
+
+                    currentUser = { name: ownerName, role: 'owner', joined_at: new Date().toISOString() };
+                    allUsers = [currentUser];
+
                     showVaultScreen();
-                }, 1000);
-            } catch (e) {
-                errorEl.textContent = 'Failed to create vault: ' + e.message;
-                derivedKey = null;
-            } finally {
-                btn.disabled = false;
-                btn.textContent = originalText;
-            }
+                } catch (e) {
+                    errorEl.textContent = 'Failed to create vault: ' + e.message;
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Create Vault';
+                }
+            });
         }
 
         function lock() {
