@@ -407,6 +407,12 @@
             </div>
             <button id="unlockBtn">Unlock Vault</button>
             <div id="lockError" class="error"></div>
+            <div id="lockSuccess" class="success"></div>
+
+            <div style="text-align: center; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #2a2a2a;">
+                <p style="color: #888; font-size: 0.85rem; margin-bottom: 0.75rem;">First time here?</p>
+                <button class="secondary" id="createVaultBtn">Create New Vault</button>
+            </div>
         </div>
 
         <!-- Vault Screen -->
@@ -577,21 +583,30 @@
         async function getSalt() {
             const serverData = await fetchVaultFromServer();
 
-            if (serverData.salt) {
+            if (serverData.salt && serverData.salt !== '') {
                 return base64ToArrayBuffer(serverData.salt);
             }
 
-            // Generate new salt for first-time setup
+            // No salt = vault doesn't exist yet
+            return null;
+        }
+
+        async function createNewVault(passphrase) {
+            // Generate new salt
             const salt = crypto.getRandomValues(new Uint8Array(16));
             const saltBase64 = arrayBufferToBase64(salt);
 
-            // Save empty vault with new salt
+            // Derive key from passphrase
+            const key = await deriveKey(passphrase, salt);
+
+            // Encrypt empty vault
             const emptyVault = JSON.stringify([]);
-            const tempKey = await deriveKey(crypto.getRandomValues(new Uint8Array(32)), salt);
-            const encrypted = await encrypt(emptyVault, tempKey);
+            const encrypted = await encrypt(emptyVault, key);
+
+            // Save to server
             await saveVaultToServer(saltBase64, encrypted);
 
-            return salt;
+            return { salt, key };
         }
 
         async function saveVault() {
@@ -815,6 +830,7 @@
         async function unlock() {
             const passphrase = document.getElementById('passphrase').value;
             const errorEl = document.getElementById('lockError');
+            const successEl = document.getElementById('lockSuccess');
             const btn = document.getElementById('unlockBtn');
 
             if (!passphrase) {
@@ -823,11 +839,20 @@
             }
 
             errorEl.textContent = '';
+            successEl.textContent = '';
             btn.disabled = true;
             btn.textContent = 'Unlocking...';
 
             try {
-                const salt = getSalt();
+                const salt = await getSalt();
+
+                if (!salt) {
+                    errorEl.textContent = 'No vault exists yet. Click "Create New Vault" below.';
+                    btn.disabled = false;
+                    btn.textContent = 'Unlock Vault';
+                    return;
+                }
+
                 derivedKey = await deriveKey(passphrase, salt);
                 await loadVault();
                 showVaultScreen();
@@ -837,6 +862,56 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Unlock Vault';
+            }
+        }
+
+        async function createVault() {
+            const passphrase = document.getElementById('passphrase').value;
+            const errorEl = document.getElementById('lockError');
+            const successEl = document.getElementById('lockSuccess');
+            const btn = document.getElementById('createVaultBtn');
+
+            if (!passphrase) {
+                errorEl.textContent = 'Please enter a passphrase first';
+                return;
+            }
+
+            if (passphrase.length < 12) {
+                errorEl.textContent = 'Passphrase must be at least 12 characters for security';
+                return;
+            }
+
+            errorEl.textContent = '';
+            successEl.textContent = '';
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = 'Creating...';
+
+            try {
+                const salt = await getSalt();
+
+                if (salt) {
+                    errorEl.textContent = 'A vault already exists. Use "Unlock Vault" to access it.';
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    return;
+                }
+
+                const result = await createNewVault(passphrase);
+                derivedKey = result.key;
+                vault = [];
+
+                successEl.textContent = '✓ Vault created! Opening...';
+
+                setTimeout(() => {
+                    showVaultScreen();
+                }, 1000);
+            } catch (e) {
+                errorEl.textContent = 'Failed to create vault: ' + e.message;
+                derivedKey = null;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
             }
         }
 
@@ -878,6 +953,7 @@
         // ===== Event Listeners =====
 
         document.getElementById('unlockBtn').addEventListener('click', unlock);
+        document.getElementById('createVaultBtn').addEventListener('click', createVault);
         document.getElementById('passphrase').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') unlock();
         });
