@@ -467,6 +467,28 @@
         </div>
     </div>
 
+    <!-- Invite Member Modal -->
+    <div class="modal" id="inviteModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Invite Member</h3>
+            </div>
+            <div class="input-group">
+                <label for="memberName">Member Name</label>
+                <input type="text" id="memberName" placeholder="e.g., Alice, Bob">
+                <small style="color: #888; display: block; margin-top: 0.5rem;">
+                    They'll need the vault passphrase to access it.
+                </small>
+            </div>
+            <div class="modal-actions">
+                <button class="secondary" id="cancelInviteBtn">Cancel</button>
+                <button id="confirmInviteBtn">Invite</button>
+            </div>
+            <div id="inviteError" class="error"></div>
+            <div id="inviteSuccess" class="success"></div>
+        </div>
+    </div>
+
     <div class="activity-notice" id="activityNotice">Auto-locking in 30s...</div>
 
     <footer>
@@ -1092,7 +1114,66 @@
         function lock() {
             derivedKey = null;
             vault = [];
+            currentUser = null;
+            allUsers = [];
             showLockScreen();
+        }
+
+        // ===== Invite Member Functions =====
+
+        function openInviteModal() {
+            document.getElementById('memberName').value = '';
+            document.getElementById('inviteError').textContent = '';
+            document.getElementById('inviteSuccess').textContent = '';
+            document.getElementById('inviteModal').classList.add('active');
+        }
+
+        function closeInviteModal() {
+            document.getElementById('inviteModal').classList.remove('active');
+        }
+
+        async function inviteMember() {
+            const memberName = document.getElementById('memberName').value.trim();
+            const errorEl = document.getElementById('inviteError');
+            const successEl = document.getElementById('inviteSuccess');
+            const btn = document.getElementById('confirmInviteBtn');
+
+            if (!memberName) {
+                errorEl.textContent = 'Please enter a member name';
+                return;
+            }
+
+            // Check if already exists
+            if (allUsers.find(u => u.name.toLowerCase() === memberName.toLowerCase())) {
+                errorEl.textContent = 'This person is already a member';
+                return;
+            }
+
+            errorEl.textContent = '';
+            successEl.textContent = '';
+            btn.disabled = true;
+            btn.textContent = 'Inviting...';
+
+            try {
+                const serverData = await fetchVaultFromServer();
+                const saltBase64 = serverData.salt;
+
+                await createUser(saltBase64, memberName, 'member');
+
+                // Reload users list
+                allUsers = await loadUsers(saltBase64);
+
+                successEl.textContent = `✓ ${memberName} invited successfully!`;
+
+                setTimeout(() => {
+                    closeInviteModal();
+                }, 1500);
+            } catch (e) {
+                errorEl.textContent = 'Failed to invite member: ' + e.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Invite';
+            }
         }
 
         // ===== Utilities =====
@@ -1137,9 +1218,17 @@
         document.getElementById('saveNoteBtn').addEventListener('click', saveNote);
         document.getElementById('cancelNoteBtn').addEventListener('click', closeModal);
 
-        // Close modal on backdrop click
+        // Invite member listeners
+        document.getElementById('inviteUserBtn').addEventListener('click', openInviteModal);
+        document.getElementById('confirmInviteBtn').addEventListener('click', inviteMember);
+        document.getElementById('cancelInviteBtn').addEventListener('click', closeInviteModal);
+
+        // Close modals on backdrop click
         document.getElementById('noteModal').addEventListener('click', (e) => {
             if (e.target.id === 'noteModal') closeModal();
+        });
+        document.getElementById('inviteModal').addEventListener('click', (e) => {
+            if (e.target.id === 'inviteModal') closeInviteModal();
         });
 
         // Activity tracking
