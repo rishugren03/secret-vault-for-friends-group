@@ -583,12 +583,20 @@
         async function getSalt() {
             const serverData = await fetchVaultFromServer();
 
-            if (serverData.salt && serverData.salt !== '') {
+            // Check if vault actually exists (non-empty salt and encrypted data)
+            if (serverData.salt && serverData.salt.trim() !== '' &&
+                serverData.encryptedData && serverData.encryptedData.trim() !== '') {
                 return base64ToArrayBuffer(serverData.salt);
             }
 
-            // No salt = vault doesn't exist yet
+            // Empty or missing = vault doesn't exist yet
             return null;
+        }
+
+        async function vaultExists() {
+            const serverData = await fetchVaultFromServer();
+            return !!(serverData.salt && serverData.salt.trim() !== '' &&
+                      serverData.encryptedData && serverData.encryptedData.trim() !== '');
         }
 
         async function createNewVault(passphrase) {
@@ -624,10 +632,9 @@
         async function loadVault() {
             const serverData = await fetchVaultFromServer();
 
-            if (!serverData.encryptedData) {
-                // First time - create empty vault
+            if (!serverData.encryptedData || serverData.encryptedData.trim() === '') {
+                // First time - empty vault
                 vault = [];
-                await saveVault();
                 return [];
             }
 
@@ -888,9 +895,9 @@
             btn.textContent = 'Creating...';
 
             try {
-                const salt = await getSalt();
+                const exists = await vaultExists();
 
-                if (salt) {
+                if (exists) {
                     errorEl.textContent = 'A vault already exists. Use "Unlock Vault" to access it.';
                     btn.disabled = false;
                     btn.textContent = originalText;

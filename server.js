@@ -148,6 +148,29 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', database: usePostgres ? 'postgresql' : 'sqlite' });
 });
 
+// Reset vault (for testing/debugging - remove in production or protect with auth)
+app.post('/api/vault/reset', async (req, res) => {
+    try {
+        if (usePostgres) {
+            await pgPool.query(`
+                UPDATE vault
+                SET salt = '', encrypted_data = '', updated_at = CURRENT_TIMESTAMP
+                WHERE id = 1
+            `);
+        } else {
+            db.prepare(`
+                UPDATE vault
+                SET salt = '', encrypted_data = '', updated_at = datetime('now')
+                WHERE id = 1
+            `).run();
+        }
+        res.json({ success: true, message: 'Vault reset successfully' });
+    } catch (error) {
+        console.error('Error resetting vault:', error);
+        res.status(500).json({ error: 'Failed to reset vault' });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`🔒 Private Shared Vault running on http://localhost:${PORT}`);
     console.log(`📂 Database: ${usePostgres ? 'PostgreSQL' : 'SQLite'}`);
