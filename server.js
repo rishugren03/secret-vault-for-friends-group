@@ -1,5 +1,4 @@
 import express from 'express';
-import Database from 'better-sqlite3';
 import pg from 'pg';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -43,6 +42,17 @@ if (usePostgres) {
         `);
     }
 } else {
+    // Try to load SQLite, but fail gracefully if not available
+    let Database;
+    try {
+        const sqlite3Module = await import('better-sqlite3');
+        Database = sqlite3Module.default;
+    } catch (err) {
+        console.error('\n⚠️  SQLite not available. Please set DATABASE_URL to use PostgreSQL.\n');
+        console.error('Example: DATABASE_URL=postgresql://user:pass@host:5432/dbname\n');
+        process.exit(1);
+    }
+
     db = new Database('vault.db');
     console.log('Using SQLite database: vault.db');
 

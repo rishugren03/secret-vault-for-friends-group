@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "express": "^4.21.2",
-    "better-sqlite3": "^11.8.1",
     "pg": "^8.13.1"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.8.1"
   },
   "engines": {
     "node": ">=18"

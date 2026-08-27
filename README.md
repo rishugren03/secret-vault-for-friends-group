@@ -47,10 +47,21 @@ npm start
 
 ## Deploy
 
-The app can run anywhere Node.js runs:
-- Heroku, Render, Railway (auto-detect PostgreSQL via DATABASE_URL)
-- VPS with SQLite
-- Docker container
+### Cloud Platforms (Render, Heroku, Railway)
+
+These platforms auto-provide a `DATABASE_URL` when you add a PostgreSQL database:
+
+1. Create a new Web Service
+2. Add a PostgreSQL database (will set `DATABASE_URL` automatically)
+3. Deploy — the app will detect PostgreSQL and use it
+
+**Note:** SQLite requires native compilation and won't work on all cloud platforms. Use PostgreSQL for production deployments.
+
+### VPS or Docker
+
+For VPS/Docker deployments, you can use either:
+- SQLite (local file): just `npm start`
+- PostgreSQL: set `DATABASE_URL` environment variable
 
 ## Security Disclaimer
 
