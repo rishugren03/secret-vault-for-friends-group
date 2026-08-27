@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Shared Vault</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            margin: 0 auto;
+            flex: 1;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 2rem 0 1rem;
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+
+        /* Lock screen */
+        .lock-screen {
+            display: none;
+            padding: 2rem;
+            background: #1a1a1a;
+            border-radius: 12px;
+            margin-top: 4rem;
+        }
+
+        .lock-screen.active {
+            display: block;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: #bbb;
+        }
+
+        input[type="password"], input[type="text"], textarea {
+            width: 100%;
+            padding: 0.75rem;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #4a90e2;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.875rem;
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #357abd;
+        }
+
+        button:disabled {
+            background: #333;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        button.secondary {
+            background: #2a2a2a;
+        }
+
+        button.secondary:hover {
+            background: #333;
+        }
+
+        button.danger {
+            background: #c44;
+        }
+
+        button.danger:hover {
+            background: #a33;
+        }
+
+        .error {
+            color: #ff6b6b;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+
+        .success {
+            color: #51cf66;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+
+        /* Vault screen */
+        .vault-screen {
+            display: none;
+        }
+
+        .vault-screen.active {
+            display: block;
+        }
+
+        .vault-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            gap: 1rem;
+        }
+
+        .vault-header h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .vault-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .icon-btn {
+            width: auto;
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        .notes-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .note-card {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .note-card:hover {
+            border-color: #4a90e2;
+            background: #1f1f1f;
+        }
+
+        .note-card.expanded {
+            cursor: default;
+        }
+
+        .note-card.expanded:hover {
+            background: #1a1a1a;
+        }
+
+        .note-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            gap: 1rem;
+        }
+
+        .note-title {
+            font-weight: 500;
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .note-date {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .note-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .note-actions button {
+            width: auto;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        .note-body {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #2a2a2a;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #ccc;
+            line-height: 1.6;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #666;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: #1a1a1a;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-header h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+        }
+
+        .modal-actions button {
+            flex: 1;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 3rem;
+            padding: 2rem 1rem 1rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #666;
+            line-height: 1.6;
+            border-top: 1px solid #2a2a2a;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        footer strong {
+            color: #888;
+        }
+
+        /* Activity timer */
+        .activity-notice {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            background: #2a2a2a;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: #888;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .activity-notice.visible {
+            opacity: 1;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 0.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .lock-screen {
+                padding: 1.5rem;
+                margin-top: 2rem;
+            }
+
+            .vault-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .vault-actions {
+                width: 100%;
+            }
+
+            .icon-btn {
+                flex: 1;
+            }
+
+            .modal-content {
+                padding: 1.5rem;
+            }
+
+            .note-header {
+                flex-direction: column;
+            }
+
+            .note-actions {
+                width: 100%;
+            }
+
+            .note-actions button {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 Private Shared Vault</h1>
+        <p class="subtitle">End-to-end encrypted notes for your group</p>
+
+        <!-- Lock Screen -->
+        <div class="lock-screen active" id="lockScreen">
+            <div class="input-group">
+                <label for="passphrase">Shared Passphrase</label>
+                <input
+                    type="password"
+                    id="passphrase"
+                    placeholder="Enter your group's passphrase"
+                    autocomplete="off"
+                >
+            </div>
+            <button id="unlockBtn">Unlock Vault</button>
+            <div id="lockError" class="error"></div>
+        </div>
+
+        <!-- Vault Screen -->
+        <div class="vault-screen" id="vaultScreen">
+            <div class="vault-header">
+                <h2>Your Notes</h2>
+                <div class="vault-actions">
+                    <button class="icon-btn" id="addNoteBtn">+ Add Note</button>
+                    <button class="icon-btn secondary" id="lockBtn">🔒 Lock</button>
+                </div>
+            </div>
+
+            <div class="notes-list" id="notesList">
+                <div class="empty-state">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <p>No notes yet. Create your first secure note.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Note Modal -->
+    <div class="modal" id="noteModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Add Note</h3>
+            </div>
+            <div class="input-group">
+                <label for="noteTitle">Title</label>
+                <input type="text" id="noteTitle" placeholder="Note title">
+            </div>
+            <div class="input-group">
+                <label for="noteBody">Content</label>
+                <textarea id="noteBody" placeholder="Your secret note..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="secondary" id="cancelNoteBtn">Cancel</button>
+                <button id="saveNoteBtn">Save Note</button>
+            </div>
+            <div id="modalError" class="error"></div>
+        </div>
+    </div>
+
+    <div class="activity-notice" id="activityNotice">Auto-locking in 30s...</div>
+
+    <footer>
+        <strong>Security Notice:</strong> This is a lightweight tool for convenience, not audited security software.
+        Don't store highly sensitive data (financial credentials, etc.).
+        Anyone with both the link and passphrase has full access.
+        The encrypted blob is safe from direct reading, but weak passphrases can be brute-forced — use a long, random one.
+        <strong>Losing the passphrase means losing all data permanently</strong> — there is no recovery mechanism.
+    </footer>
+
+    <script type="module">
+        // ===== Configuration =====
+        const PBKDF2_ITERATIONS = 250000;
+        const AUTO_LOCK_MS = 5 * 60 * 1000; // 5 minutes
+        const AUTO_LOCK_WARNING_MS = 30 * 1000; // Show warning 30s before
+        const API_BASE = window.location.origin;
+
+        // ===== State =====
+        let derivedKey = null;
+        let vault = [];
+        let editingNoteId = null;
+        let activityTimer = null;
+        let warningTimer = null;
+
+        // ===== Crypto Functions =====
+
+        async function deriveKey(passphrase, salt) {
+            const encoder = new TextEncoder();
+            const passphraseKey = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(passphrase),
+                'PBKDF2',
+                false,
+                ['deriveBits', 'deriveKey']
+            );
+
+            return await crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: salt,
+                    iterations: PBKDF2_ITERATIONS,
+                    hash: 'SHA-256'
+                },
+                passphraseKey,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+
+        async function encrypt(data, key) {
+            const encoder = new TextEncoder();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                encoder.encode(data)
+            );
+
+            // Combine IV + encrypted data
+            const combined = new Uint8Array(iv.length + encrypted.byteLength);
+            combined.set(iv);
+            combined.set(new Uint8Array(encrypted), iv.length);
+
+            return arrayBufferToBase64(combined);
+        }
+
+        async function decrypt(encryptedData, key) {
+            const combined = base64ToArrayBuffer(encryptedData);
+            const iv = combined.slice(0, 12);
+            const data = combined.slice(12);
+
+            try {
+                const decrypted = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: iv },
+                    key,
+                    data
+                );
+                const decoder = new TextDecoder();
+                return decoder.decode(decrypted);
+            } catch (e) {
+                throw new Error('Decryption failed - incorrect passphrase or corrupted data');
+            }
+        }
+
+        function arrayBufferToBase64(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary);
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        // ===== Storage Functions =====
+
+        async function fetchVaultFromServer() {
+            const response = await fetch(`${API_BASE}/api/vault`);
+            if (!response.ok) throw new Error('Failed to fetch vault from server');
+            return await response.json();
+        }
+
+        async function saveVaultToServer(salt, encryptedData) {
+            const response = await fetch(`${API_BASE}/api/vault`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ salt, encryptedData })
+            });
+            if (!response.ok) throw new Error('Failed to save vault to server');
+            return await response.json();
+        }
+
+        async function getSalt() {
+            const serverData = await fetchVaultFromServer();
+
+            if (serverData.salt) {
+                return base64ToArrayBuffer(serverData.salt);
+            }
+
+            // Generate new salt for first-time setup
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            const saltBase64 = arrayBufferToBase64(salt);
+
+            // Save empty vault with new salt
+            const emptyVault = JSON.stringify([]);
+            const tempKey = await deriveKey(crypto.getRandomValues(new Uint8Array(32)), salt);
+            const encrypted = await encrypt(emptyVault, tempKey);
+            await saveVaultToServer(saltBase64, encrypted);
+
+            return salt;
+        }
+
+        async function saveVault() {
+            if (!derivedKey) throw new Error('No key available');
+
+            const vaultJson = JSON.stringify(vault);
+            const encrypted = await encrypt(vaultJson, derivedKey);
+
+            const serverData = await fetchVaultFromServer();
+            const saltBase64 = serverData.salt;
+
+            await saveVaultToServer(saltBase64, encrypted);
+        }
+
+        async function loadVault() {
+            const serverData = await fetchVaultFromServer();
+
+            if (!serverData.encryptedData) {
+                // First time - create empty vault
+                vault = [];
+                await saveVault();
+                return [];
+            }
+
+            if (!derivedKey) throw new Error('No key available');
+            const decrypted = await decrypt(serverData.encryptedData, derivedKey);
+            vault = JSON.parse(decrypted);
+            return vault;
+        }
+
+        // ===== UI Functions =====
+
+        function showLockScreen() {
+            document.getElementById('lockScreen').classList.add('active');
+            document.getElementById('vaultScreen').classList.remove('active');
+            document.getElementById('passphrase').value = '';
+            document.getElementById('lockError').textContent = '';
+            clearActivityTimers();
+        }
+
+        function showVaultScreen() {
+            document.getElementById('lockScreen').classList.remove('active');
+            document.getElementById('vaultScreen').classList.add('active');
+            renderNotes();
+            resetActivityTimer();
+        }
+
+        function renderNotes() {
+            const notesList = document.getElementById('notesList');
+
+            if (vault.length === 0) {
+                notesList.innerHTML = `
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <p>No notes yet. Create your first secure note.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            notesList.innerHTML = vault
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                .map(note => `
+                    <div class="note-card" data-id="${note.id}">
+                        <div class="note-header">
+                            <div>
+                                <div class="note-title">${escapeHtml(note.title)}</div>
+                                <div class="note-date">${formatDate(note.createdAt)}</div>
+                            </div>
+                            <div class="note-actions">
+                                <button class="secondary edit-note" data-id="${note.id}">Edit</button>
+                                <button class="danger delete-note" data-id="${note.id}">Delete</button>
+                            </div>
+                        </div>
+                        <div class="note-body" style="display: none;">${escapeHtml(note.body)}</div>
+                    </div>
+                `).join('');
+
+            // Add click handlers to expand/collapse
+            notesList.querySelectorAll('.note-card').forEach(card => {
+                const body = card.querySelector('.note-body');
+                card.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'BUTTON') return;
+                    const isVisible = body.style.display !== 'none';
+                    body.style.display = isVisible ? 'none' : 'block';
+                    card.classList.toggle('expanded', !isVisible);
+                });
+            });
+
+            // Add edit handlers
+            notesList.querySelectorAll('.edit-note').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openEditModal(btn.dataset.id);
+                });
+            });
+
+            // Add delete handlers
+            notesList.querySelectorAll('.delete-note').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (confirm('Delete this note permanently?')) {
+                        await deleteNote(btn.dataset.id);
+                    }
+                });
+            });
+        }
+
+        function openAddModal() {
+            editingNoteId = null;
+            document.getElementById('modalTitle').textContent = 'Add Note';
+            document.getElementById('noteTitle').value = '';
+            document.getElementById('noteBody').value = '';
+            document.getElementById('modalError').textContent = '';
+            document.getElementById('noteModal').classList.add('active');
+        }
+
+        function openEditModal(noteId) {
+            const note = vault.find(n => n.id === noteId);
+            if (!note) return;
+
+            editingNoteId = noteId;
+            document.getElementById('modalTitle').textContent = 'Edit Note';
+            document.getElementById('noteTitle').value = note.title;
+            document.getElementById('noteBody').value = note.body;
+            document.getElementById('modalError').textContent = '';
+            document.getElementById('noteModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('noteModal').classList.remove('active');
+            editingNoteId = null;
+        }
+
+        // ===== Note Operations =====
+
+        async function saveNote() {
+            const title = document.getElementById('noteTitle').value.trim();
+            const body = document.getElementById('noteBody').value.trim();
+            const errorEl = document.getElementById('modalError');
+
+            if (!title) {
+                errorEl.textContent = 'Title is required';
+                return;
+            }
+
+            try {
+                if (editingNoteId) {
+                    // Edit existing
+                    const note = vault.find(n => n.id === editingNoteId);
+                    if (note) {
+                        note.title = title;
+                        note.body = body;
+                    }
+                } else {
+                    // Create new
+                    const newNote = {
+                        id: generateId(),
+                        title,
+                        body,
+                        createdAt: new Date().toISOString()
+                    };
+                    vault.push(newNote);
+                }
+
+                await saveVault();
+                closeModal();
+                renderNotes();
+            } catch (e) {
+                errorEl.textContent = 'Failed to save note: ' + e.message;
+            }
+        }
+
+        async function deleteNote(noteId) {
+            vault = vault.filter(n => n.id !== noteId);
+            await saveVault();
+            renderNotes();
+        }
+
+        // ===== Activity Tracking =====
+
+        function resetActivityTimer() {
+            clearActivityTimers();
+
+            activityTimer = setTimeout(() => {
+                lock();
+            }, AUTO_LOCK_MS);
+
+            warningTimer = setTimeout(() => {
+                showActivityWarning();
+            }, AUTO_LOCK_MS - AUTO_LOCK_WARNING_MS);
+        }
+
+        function clearActivityTimers() {
+            if (activityTimer) clearTimeout(activityTimer);
+            if (warningTimer) clearTimeout(warningTimer);
+            hideActivityWarning();
+        }
+
+        function showActivityWarning() {
+            const notice = document.getElementById('activityNotice');
+            notice.classList.add('visible');
+        }
+
+        function hideActivityWarning() {
+            const notice = document.getElementById('activityNotice');
+            notice.classList.remove('visible');
+        }
+
+        function onActivity() {
+            if (derivedKey && document.getElementById('vaultScreen').classList.contains('active')) {
+                resetActivityTimer();
+            }
+        }
+
+        // ===== Auth =====
+
+        async function unlock() {
+            const passphrase = document.getElementById('passphrase').value;
+            const errorEl = document.getElementById('lockError');
+            const btn = document.getElementById('unlockBtn');
+
+            if (!passphrase) {
+                errorEl.textContent = 'Please enter a passphrase';
+                return;
+            }
+
+            errorEl.textContent = '';
+            btn.disabled = true;
+            btn.textContent = 'Unlocking...';
+
+            try {
+                const salt = getSalt();
+                derivedKey = await deriveKey(passphrase, salt);
+                await loadVault();
+                showVaultScreen();
+            } catch (e) {
+                errorEl.textContent = e.message || 'Incorrect passphrase';
+                derivedKey = null;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Unlock Vault';
+            }
+        }
+
+        function lock() {
+            derivedKey = null;
+            vault = [];
+            showLockScreen();
+        }
+
+        // ===== Utilities =====
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(isoString) {
+            const date = new Date(isoString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+
+            return date.toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+            });
+        }
+
+        // ===== Event Listeners =====
+
+        document.getElementById('unlockBtn').addEventListener('click', unlock);
+        document.getElementById('passphrase').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') unlock();
+        });
+
+        document.getElementById('lockBtn').addEventListener('click', lock);
+        document.getElementById('addNoteBtn').addEventListener('click', openAddModal);
+        document.getElementById('saveNoteBtn').addEventListener('click', saveNote);
+        document.getElementById('cancelNoteBtn').addEventListener('click', closeModal);
+
+        // Close modal on backdrop click
+        document.getElementById('noteModal').addEventListener('click', (e) => {
+            if (e.target.id === 'noteModal') closeModal();
+        });
+
+        // Activity tracking
+        ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(event => {
+            document.addEventListener(event, onActivity, { passive: true });
+        });
+
+        // Initialize
+        console.log('Private Shared Vault initialized');
+        console.log('Using PBKDF2 with', PBKDF2_ITERATIONS, 'iterations');
+    </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "private-shared-vault",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "End-to-end encrypted shared vault for small groups",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "better-sqlite3": "^11.8.1",
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
