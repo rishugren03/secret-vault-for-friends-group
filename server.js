@@ -79,6 +79,11 @@ if (usePostgres) {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
+// Redirect root to vault
+app.get('/', (req, res) => {
+    res.redirect('/vault.html');
+});
+
 // Get vault data (salt + encrypted blob)
 app.get('/api/vault', async (req, res) => {
     try {
